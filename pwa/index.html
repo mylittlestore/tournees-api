@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Livraison">
+  <meta name="theme-color" content="#2D5F8A">
+  <link rel="manifest" href="/app/manifest.json">
+  <link rel="apple-touch-icon" href="/app/icon-192.png">
+  <title>Tournées Livraison</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root{--blue:#2D5F8A;--dark:#1a3a5c;--green:#27ae60;--orange:#e67e22;--gold:#f39c12;--grey:#95a5a6;--red:#e74c3c}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+
+    /* ── LOGIN ── */
+    #screen-login{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;background:linear-gradient(160deg,var(--dark),#0d2135);padding:24px}
+    .login-logo{font-size:64px;margin-bottom:8px}
+    .login-title{color:white;font-size:26px;font-weight:700;margin-bottom:4px}
+    .login-sub{color:rgba(255,255,255,.5);font-size:14px;margin-bottom:40px}
+    .login-card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:28px 24px;width:100%;max-width:360px}
+    .lbl{color:rgba(255,255,255,.7);font-size:13px;margin-bottom:8px;display:block}
+    .code-inp{width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:12px;color:white;font-size:32px;font-weight:700;padding:14px;text-align:center;text-transform:uppercase;letter-spacing:8px;outline:none}
+    .code-inp:focus{border-color:var(--gold)}
+    .login-btn{width:100%;margin-top:16px;background:var(--gold);color:var(--dark);border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer}
+    .login-btn:active{opacity:.8}
+    .err{color:#ff6b6b;font-size:13px;text-align:center;margin-top:12px;min-height:18px}
+    .srv-status{color:rgba(255,255,255,.4);font-size:11px;text-align:center;margin-top:14px}
+    .srv-wrap{margin-top:14px;border-top:1px solid rgba(255,255,255,.1);padding-top:14px}
+    .srv-inp{width:100%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.8);font-size:12px;padding:8px 12px;outline:none;font-family:monospace}
+
+    /* ── ÉCRAN TOURNÉE — carte plein écran ── */
+    #screen-tournee{display:none;position:fixed;inset:0}
+
+    /* Carte occupe tout l'écran */
+    #map{position:absolute;inset:0;z-index:0}
+
+    /* ── HEADER FLOTTANT en haut ── */
+    .hdr{position:absolute;top:0;left:0;right:0;z-index:500;background:linear-gradient(180deg,rgba(26,58,92,.95) 0%,rgba(26,58,92,.0) 100%);padding:10px 14px 24px;display:flex;align-items:center;gap:10px}
+    .btn-back{background:rgba(255,255,255,.2);border:none;color:white;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;backdrop-filter:blur(4px)}
+    .hdr-info{flex:1;min-width:0}
+    .hdr-info h1{color:white;font-size:16px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+    .hdr-meta{font-size:11px;color:rgba(255,255,255,.8);display:flex;align-items:center;gap:6px;margin-top:2px}
+    .gps-pill{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.3);padding:2px 7px;border-radius:10px;backdrop-filter:blur(4px)}
+    .gps-dot{width:7px;height:7px;border-radius:50%;background:#ff4444}
+    .gps-dot.on{background:#00ff88;animation:gp 1.5s infinite}
+    @keyframes gp{0%,100%{opacity:1}50%{opacity:.3}}
+
+    /* Bouton tab liste — flottant haut droite */
+    .btn-liste-toggle{position:absolute;top:10px;right:14px;z-index:600;background:rgba(255,255,255,.2);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.3);color:white;padding:7px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer}
+
+    /* Bouton localisation — flottant milieu droite */
+    .btn-loc{position:absolute;right:14px;bottom:220px;z-index:500;background:white;border:none;width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center}
+
+    /* ── PANNEAU NAV WAZE — flottant en haut sous header ── */
+    #nav-panel{position:absolute;top:60px;left:12px;right:12px;z-index:500;background:rgba(26,58,92,.93);backdrop-filter:blur(8px);border-radius:14px;color:white;display:none;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+    .nav-instr{padding:10px 14px;display:flex;align-items:center;gap:10px}
+    .nav-icon{font-size:28px;width:38px;text-align:center;flex-shrink:0}
+    .nav-d{font-size:22px;font-weight:700;color:var(--gold)}
+    .nav-r{font-size:12px;opacity:.8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav-sub{padding:0 14px 8px;font-size:11px;opacity:.6;display:flex;justify-content:space-between}
+
+    /* ── PANNEAU ADRESSE ACTUELLE — flottant en bas ── */
+    #adresse-panel{position:absolute;bottom:0;left:0;right:0;z-index:500;background:rgba(26,58,92,.95);backdrop-filter:blur(8px);border-radius:20px 20px 0 0;color:white;box-shadow:0 -4px 20px rgba(0,0,0,.4);transition:transform .3s}
+    .adresse-main{padding:14px 16px 8px;display:flex;align-items:flex-start;gap:12px}
+    .num-cercle{background:var(--gold);color:var(--dark);font-size:16px;font-weight:700;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .adresse-texte{flex:1;min-width:0}
+    .adresse-rue{font-size:18px;font-weight:700;line-height:1.2}
+    .adresse-commune{font-size:13px;opacity:.7;margin-top:3px}
+    .adresse-refs{padding:0 16px 6px;display:flex;flex-wrap:wrap;gap:4px}
+    .ref{background:rgba(255,255,255,.1);border-radius:6px;font-size:11px;padding:3px 8px;font-family:monospace}
+    .adresse-btns{display:flex;gap:8px;padding:8px 16px 16px}
+    .btn-nav-waze{flex:1;background:var(--blue);color:white;border:none;padding:12px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer}
+    .btn-livrer{flex:2;background:var(--green);color:white;border:none;padding:12px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+
+    /* ── HANDLE pour tirer le panneau ── */
+    .handle{width:40px;height:4px;background:rgba(255,255,255,.3);border-radius:2px;margin:8px auto 4px}
+
+    /* ── BARRE PROGRESSION dans le panneau bas ── */
+    .prog{padding:4px 16px 0;display:flex;align-items:center;gap:10px}
+    .prog span{font-size:11px;color:rgba(255,255,255,.6);white-space:nowrap}
+    .ptrack{flex:1;background:rgba(255,255,255,.2);border-radius:4px;height:4px;overflow:hidden}
+    .pfill{background:var(--green);height:100%;border-radius:4px;transition:width .4s}
+
+    /* ── BOUTONS DÉMARRER superposés ── */
+    #start-wrap{position:absolute;bottom:0;left:0;right:0;z-index:500;background:rgba(26,58,92,.95);backdrop-filter:blur(8px);border-radius:20px 20px 0 0;padding:12px 16px 20px;box-shadow:0 -4px 20px rgba(0,0,0,.4)}
+    .btn-start{width:100%;background:var(--blue);color:white;border:none;padding:14px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:8px}
+
+    /* ── PANNEAU LISTE COMPLÈTE (slide depuis le bas) ── */
+    #liste-panel{position:absolute;bottom:0;left:0;right:0;z-index:700;background:var(--dark);border-radius:20px 20px 0 0;max-height:80vh;display:none;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.5)}
+    .liste-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.1);flex-shrink:0}
+    .liste-header span{color:white;font-size:15px;font-weight:700}
+    .btn-close-liste{background:rgba(255,255,255,.15);border:none;color:white;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer}
+    .liste-scroll{overflow-y:auto;flex:1;padding:8px 12px 20px;display:flex;flex-direction:column;gap:6px}
+    .arret{background:rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;border-left:4px solid var(--blue);display:flex;align-items:center;gap:10px;cursor:pointer;transition:opacity .3s}
+    .arret.livre{opacity:.3;border-left-color:var(--green)}
+    .arret.actif{border-left-color:var(--gold);background:rgba(243,156,18,.1)}
+    .arret-num{background:var(--blue);color:white;font-size:12px;font-weight:700;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .arret.actif .arret-num{background:var(--gold)}
+    .arret.livre .arret-num{background:var(--green)}
+    .arret-info{flex:1;min-width:0}
+    .arret-adr{color:white;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .arret-com{color:rgba(255,255,255,.5);font-size:11px;margin-top:1px}
+    .arret-badge{color:white;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;flex-shrink:0;white-space:nowrap}
+
+    /* TOAST */
+    .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--dark);color:white;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+    .toast.show{opacity:1}
+
+    /* Animation disparition adresse livrée */
+    @keyframes slideOut{0%{transform:translateX(0);opacity:1}100%{transform:translateX(100%);opacity:0}}
+    .slide-out{animation:slideOut .4s ease-in forwards}
+  </style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<!-- ══ LOGIN ══════════════════════════════════════════════════════════ -->
+<div id="screen-login">
+  <div class="login-logo">🚚</div>
+  <div class="login-title">Tournées Livraison</div>
+  <div class="login-sub">Application chauffeurs</div>
+  <div class="login-card">
+    <label class="lbl">Votre code chauffeur</label>
+    <input class="code-inp" id="code-input" type="text" maxlength="2" placeholder="A"
+           autocomplete="off" oninput="this.value=this.value.toUpperCase()"
+           onkeydown="if(event.key==='Enter')connexion()">
+    <button class="login-btn" onclick="connexion()">📦 Voir ma tournée</button>
+    <div class="err" id="err"></div>
+    <div class="srv-wrap">
+      <label class="lbl" style="font-size:11px">Adresse du serveur</label>
+      <input class="srv-inp" id="srv" type="text" placeholder="https://192.168.0.175:8002">
+    </div>
+  </div>
+  <div class="srv-status" id="srv-status">Vérification...</div>
+</div>
+
+<!-- ══ ÉCRAN TOURNÉE ══════════════════════════════════════════════════ -->
+<div id="screen-tournee">
+
+  <!-- Carte plein écran -->
+  <div id="map"></div>
+
+  <!-- Header flottant -->
+  <div class="hdr">
+    <button class="btn-back" onclick="retourLogin()">←</button>
+    <div class="hdr-info">
+      <h1 id="h-title">Chauffeur —</h1>
+      <div class="hdr-meta">
+        <span id="h-meta">—</span>
+        <div class="gps-pill">
+          <span class="gps-dot" id="gps-dot"></span>
+          <span id="gps-txt">GPS...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bouton liste -->
+  <button class="btn-liste-toggle" onclick="toggleListe()">📋 Liste</button>
+
+  <!-- Bouton localiser -->
+  <button class="btn-loc" onclick="recenter()">📍</button>
+
+  <!-- Panneau Waze (haut, visible en nav) -->
+  <div id="nav-panel">
+    <div class="nav-instr">
+      <div class="nav-icon" id="nav-icon">⬆️</div>
+      <div style="flex:1;min-width:0">
+        <div class="nav-d" id="nav-d">—</div>
+        <div class="nav-r" id="nav-r">Calcul en cours...</div>
+      </div>
+    </div>
+    <div class="nav-sub">
+      <span id="nav-dest">→</span>
+      <span id="nav-eta"></span>
+    </div>
+  </div>
+
+  <!-- Panneau adresse actuelle (bas) -->
+  <div id="adresse-panel">
+    <div class="handle"></div>
+    <div class="prog">
+      <span id="prog-txt">0 / 0</span>
+      <div class="ptrack"><div class="pfill" id="pfill" style="width:0%"></div></div>
+    </div>
+    <div class="adresse-main">
+      <div class="num-cercle" id="adr-num">1</div>
+      <div class="adresse-texte">
+        <div class="adresse-rue" id="adr-rue">—</div>
+        <div class="adresse-commune" id="adr-commune">—</div>
+      </div>
+    </div>
+    <div class="adresse-refs" id="adr-refs"></div>
+    <div class="adresse-btns">
+      <button class="btn-nav-waze" onclick="startNav()">🧭 Naviguer</button>
+      <button class="btn-livrer" onclick="livrerCurrent()">✓ Livré — suivant</button>
+    </div>
+  </div>
+
+  <!-- Panneau démarrer (quand pas encore en nav) -->
+  <div id="start-wrap" style="display:none">
+    <div class="prog" style="margin-bottom:8px">
+      <span id="prog-txt2">0 / 0</span>
+      <div class="ptrack"><div class="pfill" id="pfill2" style="width:0%"></div></div>
+    </div>
+    <button class="btn-start" onclick="startNav()">🧭 Démarrer la navigation</button>
+  </div>
+
+  <!-- Panneau liste complète (slide depuis bas) -->
+  <div id="liste-panel">
+    <div class="liste-header">
+      <span id="liste-title">Arrêts</span>
+      <button class="btn-close-liste" onclick="toggleListe()">✕</button>
+    </div>
+    <div class="liste-scroll" id="liste-scroll"></div>
+  </div>
+
+</div>
+
+<script>
+const DEFAULT_SRV = `https://${location.hostname}:8002`;
+let data=null, state=[], current=0;
+let myLat=null,myLon=null,myHead=null;
+let myMk=null,myCirc=null,watchId=null;
+let map=null,mks=[];
+let routeLine=null;
+let navOn=false;
+let lastUp=0;
+let listeOpen=false;
+
+// ══ INIT ═══════════════════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  const s=localStorage.getItem('srv');
+  document.getElementById('srv').value=s||DEFAULT_SRV;
+  ping();
+  if('serviceWorker' in navigator)
+    navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister()));
+});
+
+function getSrv(){return(document.getElementById('srv').value||DEFAULT_SRV).replace(/\/+$/,'');}
+
+async function ping(){
+  try{
+    const r=await fetch(getSrv()+'/',{signal:AbortSignal.timeout(3000)});
+    const d=await r.json();
+    document.getElementById('srv-status').textContent=`✅ Connecté — ${d.date}`;
+  }catch{document.getElementById('srv-status').textContent='❌ Serveur inaccessible';}
+}
+
+// ══ LOGIN ═══════════════════════════════════════════════════════════════
+async function connexion(){
+  const code=document.getElementById('code-input').value.trim().toUpperCase();
+  if(!code){setErr('Entrez votre code');return;}
+  const srv=getSrv();
+  localStorage.setItem('srv',srv);
+  setErr('');
+  document.getElementById('srv-status').textContent='Chargement...';
+  try{
+    const r=await fetch(`${srv}/api/tournee/${code}`,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error((await r.json().catch(()=>({detail:'Erreur'}))).detail);
+    data=await r.json();
+    const sv=localStorage.getItem(`et_${code}_${data.date}`);
+    state=data.arrets.map((a,i)=>({...a,livre:sv?(JSON.parse(sv)[i]||false):false}));
+    current=state.findIndex(a=>!a.livre);
+    if(current===-1) current=0;
+    demarrer();
+  }catch(e){setErr(e.message);document.getElementById('srv-status').textContent='';}
+}
+
+// ══ DÉMARRAGE ════════════════════════════════════════════════════════════
+function demarrer(){
+  document.getElementById('screen-login').style.display='none';
+  document.getElementById('screen-tournee').style.display='block';
+  document.getElementById('h-title').textContent=`Chauffeur ${data.chauffeur}`;
+  document.getElementById('h-meta').textContent=`${data.nb_arrets} arrêts • ${data.nb_colis} colis`;
+  initMap();
+  afficherArretActuel();
+  updateProg();
+  startGPS();
+  renderListe();
+}
+
+function retourLogin(){
+  stopNav();
+  if(watchId){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  save();
+  document.getElementById('screen-tournee').style.display='none';
+  document.getElementById('screen-login').style.display='flex';
+  ping();
+}
+
+// ══ CARTE ════════════════════════════════════════════════════════════════
+function initMap(){
+  if(map){mks.forEach(m=>map.removeLayer(m));mks=[];map.invalidateSize();return;}
+  map=L.map('map',{zoomControl:false}).setView([data.depot.lat,data.depot.lon],14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
+  L.control.zoom({position:'topleft'}).addTo(map);
+
+  L.marker([data.depot.lat,data.depot.lon],{
+    icon:L.divIcon({className:'',
+      html:`<div style="background:#1a3a5c;color:white;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4)">🏭</div>`,
+      iconSize:[32,32],iconAnchor:[16,16]})
+  }).addTo(map);
+
+  mks=state.map((a,i)=>{
+    const mk=L.marker([a.lat,a.lon],{
+      icon:L.divIcon({className:'',
+        html:`<div id="mk-${i}" style="background:${a.livre?'#27ae60':(i===current?'#f39c12':'#2D5F8A')};color:white;width:${i===current?32:26}px;height:${i===current?32:26}px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${i===current?13:11}px;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,.3)">${a.livre?'✓':a.ordre}</div>`,
+        iconSize:[i===current?32:26,i===current?32:26],iconAnchor:[i===current?16:13,i===current?16:13]})
+    }).addTo(map);
+    mk.on('click',()=>selArret(i));
+    return mk;
+  });
+
+  const pts=[[data.depot.lat,data.depot.lon],...state.filter(a=>!a.livre).map(a=>[a.lat,a.lon])];
+  map.fitBounds(L.latLngBounds(pts),{padding:[60,60]});
+  setTimeout(()=>map.invalidateSize(),300);
+}
+
+// ══ AFFICHER ARRÊT ACTUEL ════════════════════════════════════════════════
+function afficherArretActuel(){
+  const a=state[current];
+  if(!a||a.livre){
+    // Tous livrés
+    document.getElementById('adresse-panel').style.display='none';
+    document.getElementById('start-wrap').style.display='none';
+    return;
+  }
+  document.getElementById('adresse-panel').style.display='block';
+  document.getElementById('start-wrap').style.display='none';
+  document.getElementById('adr-num').textContent=a.ordre;
+  document.getElementById('adr-rue').textContent=a.adresse;
+  document.getElementById('adr-commune').textContent=`${a.cp} ${a.commune}`;
+  const refsEl=document.getElementById('adr-refs');
+  refsEl.innerHTML=a.refs.map(r=>`<span class="ref">📦 ${r}</span>`).join('');
+  // Centrer sur l'arrêt
+  if(!navOn) map.setView([a.lat,a.lon],16);
+}
+
+// ══ GPS ══════════════════════════════════════════════════════════════════
+function startGPS(){
+  if(!navigator.geolocation){setGPS(false,'Non dispo');return;}
+  watchId=navigator.geolocation.watchPosition(onPos,onErr,
+    {enableHighAccuracy:true,maximumAge:1000,timeout:15000});
+}
+
+function onPos(pos){
+  myLat=pos.coords.latitude; myLon=pos.coords.longitude; myHead=pos.coords.heading;
+  const acc=Math.round(pos.coords.accuracy);
+  setGPS(true,`±${acc}m`);
+  const rot=(myHead&&!isNaN(myHead))?`transform:rotate(${myHead}deg)`:'';
+  const html=`<div style="width:36px;height:36px;position:relative"><div style="position:absolute;inset:0;background:#2980b9;border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:18px;${rot}">🚚</div></div>`;
+  if(!myMk){
+    myMk=L.marker([myLat,myLon],{icon:L.divIcon({className:'',html,iconSize:[36,36],iconAnchor:[18,18]}),zIndexOffset:2000}).addTo(map);
+    myCirc=L.circle([myLat,myLon],{radius:acc,color:'#2980b9',fillColor:'#2980b9',fillOpacity:.1,weight:1}).addTo(map);
+    toast('📍 GPS activé');
+  } else {
+    myMk.setLatLng([myLat,myLon]);
+    myMk.setIcon(L.divIcon({className:'',html,iconSize:[36,36],iconAnchor:[18,18]}));
+    myCirc.setLatLng([myLat,myLon]); myCirc.setRadius(acc);
+  }
+  if(navOn){
+    map.setView([myLat,myLon],17);
+    const now=Date.now();
+    if(now-lastUp>5000){lastUp=now;updateRoute();}
+  }
+}
+
+function onErr(e){setGPS(false,e.code===1?'Refusé':'Erreur');}
+function setGPS(on,txt){
+  document.getElementById('gps-dot').className='gps-dot'+(on?' on':'');
+  document.getElementById('gps-txt').textContent=txt;
+}
+
+// ══ NAVIGATION ════════════════════════════════════════════════════════════
+async function startNav(){
+  if(!myLat){toast('Attendez le GPS...');return;}
+  const nx=state.findIndex((a,i)=>i>=current&&!a.livre);
+  if(nx===-1){toast('🎉 Tournée terminée !');return;}
+  current=nx; navOn=true;
+  document.getElementById('nav-panel').style.display='block';
+  afficherArretActuel();
+  await calcRoute(nx);
+  map.setView([myLat,myLon],17);
+  renderListe();
+}
+
+function stopNav(){
+  navOn=false;
+  document.getElementById('nav-panel').style.display='none';
+  if(routeLine){map.removeLayer(routeLine);routeLine=null;}
+}
+
+async function calcRoute(idx){
+  if(!myLat||!state[idx]) return;
+  const dest=state[idx];
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${myLon},${myLat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&steps=true`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw 0;
+    const d=await r.json();
+    if(!d.routes?.length) throw 0;
+    const route=d.routes[0];
+    if(routeLine) map.removeLayer(routeLine);
+    routeLine=L.geoJSON(route.geometry,{style:{color:'#e67e22',weight:6,opacity:.9,lineCap:'round',lineJoin:'round'}}).addTo(map);
+    const steps=route.legs[0].steps;
+    const step=steps[0];
+    const dm=step.distance;
+    const dtxt=dm<1000?`${Math.round(dm)} m`:`${(dm/1000).toFixed(1)} km`;
+    const ICONS={'turn left':'↰','turn right':'↱','straight':'⬆','arrive':'🎯','depart':'🚀','roundabout':'🔄','turn slight left':'↖','turn slight right':'↗','turn sharp left':'⬅','turn sharp right':'➡'};
+    const m=step.maneuver||{};
+    const k=m.modifier?`${m.type} ${m.modifier}`:m.type;
+    document.getElementById('nav-icon').textContent=ICONS[k]||ICONS[m.type]||'⬆️';
+    document.getElementById('nav-d').textContent=dtxt;
+    document.getElementById('nav-r').textContent=step.name||'Continuez';
+    const td=route.distance<1000?`${Math.round(route.distance)}m`:`${(route.distance/1000).toFixed(1)}km`;
+    const tt=Math.round(route.duration/60);
+    document.getElementById('nav-dest').textContent=`→ ${dest.adresse}`;
+    document.getElementById('nav-eta').textContent=`${td} • ~${tt}min`;
+  }catch{
+    if(routeLine) map.removeLayer(routeLine);
+    routeLine=L.polyline([[myLat,myLon],[dest.lat,dest.lon]],{color:'#e67e22',weight:5,dashArray:'8,6'}).addTo(map);
+    document.getElementById('nav-d').textContent=`~${haversine(myLat,myLon,dest.lat,dest.lon)} km`;
+    document.getElementById('nav-r').textContent=dest.adresse;
+  }
+}
+
+async function updateRoute(){
+  const nx=state.findIndex((a,i)=>i>=current&&!a.livre);
+  if(nx!==-1) await calcRoute(nx);
+}
+
+// ══ LIVRAISON ════════════════════════════════════════════════════════════
+function livrerCurrent(){
+  const nx=state.findIndex((a,i)=>i>=current&&!a.livre);
+  if(nx!==-1) livrer(nx);
+}
+
+function livrer(i){
+  if(state[i].livre) return;
+
+  // Animation disparition du panneau adresse
+  const panel=document.getElementById('adresse-panel');
+  panel.classList.add('slide-out');
+
+  setTimeout(()=>{
+    panel.classList.remove('slide-out');
+    state[i].livre=true;
+
+    // Marqueur vert + plus petit
+    const mk=document.getElementById(`mk-${i}`);
+    if(mk){mk.style.background='#27ae60';mk.textContent='✓';mk.style.width='22px';mk.style.height='22px';mk.style.fontSize='10px';}
+
+    save();
+    fetch(`${getSrv()}/api/livrer/${data.chauffeur}/${state[i].ordre}`,{method:'POST'}).catch(()=>{});
+
+    const nx=state.findIndex((a,j)=>j>i&&!a.livre);
+    if(nx!==-1){
+      current=nx;
+      // Mettre en valeur le prochain marqueur
+      const mkNext=document.getElementById(`mk-${nx}`);
+      if(mkNext){mkNext.style.background='#f39c12';mkNext.style.width='32px';mkNext.style.height='32px';mkNext.style.fontSize='13px';}
+      afficherArretActuel();
+      if(navOn) calcRoute(nx);
+      toast(`→ Arrêt ${state[nx].ordre}`);
+    } else {
+      stopNav();
+      document.getElementById('adresse-panel').style.display='none';
+      toast('🎉 Toutes les livraisons effectuées !');
+    }
+    updateProg();
+    renderListe();
+  }, 400);
+}
+
+// ══ LISTE ════════════════════════════════════════════════════════════════
+function toggleListe(){
+  listeOpen=!listeOpen;
+  const p=document.getElementById('liste-panel');
+  p.style.display=listeOpen?'flex':'none';
+  if(listeOpen) renderListe();
+}
+
+function renderListe(){
+  const restants=state.filter(a=>!a.livre);
+  document.getElementById('liste-title').textContent=`${restants.length} arrêts restants`;
+  const c=document.getElementById('liste-scroll');
+  c.innerHTML='';
+  // Afficher seulement les non livrés
+  state.forEach((a,i)=>{
+    if(a.livre) return;
+    const div=document.createElement('div');
+    div.className='arret'+(i===current?' actif':'');
+    const bc=a.nb_colis>1?'#e74c3c':'#27ae60';
+    div.innerHTML=`
+      <div class="arret-num">${a.ordre}</div>
+      <div class="arret-info">
+        <div class="arret-adr">${a.adresse}</div>
+        <div class="arret-com">${a.cp} ${a.commune}</div>
+      </div>
+      <span class="arret-badge" style="background:${bc}">${a.nb_colis} 📦</span>`;
+    div.onclick=()=>{selArret(i);toggleListe();};
+    c.appendChild(div);
+  });
+}
+
+function selArret(i){
+  current=i;
+  afficherArretActuel();
+  map.setView([state[i].lat,state[i].lon],17);
+  if(navOn) calcRoute(i);
+  renderListe();
+}
+
+// ══ UTILS ════════════════════════════════════════════════════════════════
+function recenter(){
+  if(myLat&&myLon) map.setView([myLat,myLon],16);
+  else toast('GPS non disponible');
+}
+
+function updateProg(){
+  const nb=state.filter(a=>a.livre).length,tot=state.length;
+  const pct=`${tot?Math.round(nb/tot*100):0}%`;
+  const txt=`${nb} / ${tot} livrées`;
+  document.getElementById('prog-txt').textContent=txt;
+  document.getElementById('pfill').style.width=pct;
+  const p2=document.getElementById('prog-txt2');
+  const pf2=document.getElementById('pfill2');
+  if(p2) p2.textContent=txt;
+  if(pf2) pf2.style.width=pct;
+}
+
+function save(){
+  if(!data) return;
+  localStorage.setItem(`et_${data.chauffeur}_${data.date}`,JSON.stringify(state.map(a=>a.livre)));
+}
+
+function haversine(a,b,c,d){
+  const R=6371,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180;
+  const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;
+  return(R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))).toFixed(1);
+}
+
+function setErr(m){document.getElementById('err').textContent=m;}
+
+let _tt=null;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  if(_tt) clearTimeout(_tt);
+  _tt=setTimeout(()=>t.classList.remove('show'),2800);
+}
+</script>
+</body>
+</html>
